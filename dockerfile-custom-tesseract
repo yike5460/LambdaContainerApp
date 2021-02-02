@@ -1,0 +1,135 @@
+# Define function directory
+ARG LAYER_DIR="/opt"
+
+# FROM lambci/lambda-base:build as build-image
+FROM public.ecr.aws/bitnami/python:3.7 as build-image
+# FROM amazonlinux:2 as build-image
+
+# Install aws-lambda-cpp build dependencies
+# RUN yum -y install \
+#   g++ \
+#   make \
+#   cmake \
+#   unzip \
+#   libcurl4-openssl-dev \ 
+#   python3
+
+RUN apt-get update && \
+  apt-get install -y \
+  g++ \
+  make \
+  cmake \
+  unzip \
+  libcurl4-openssl-dev
+  
+# Include global arg in this stage of the build
+ARG LAYER_DIR
+# Create function directory
+RUN mkdir -p ${LAYER_DIR}
+# Install the runtime interface client
+# RUN yum install -y python3-pip python3 python3-setuptools
+# RUN amazon-linux-extras install python3.8
+# RUN curl -O https://bootstrap.pypa.io/get-pip.py
+# RUN python3 get-pip.py
+
+RUN pip install \
+        --target ${LAYER_DIR} \
+        awslambdaric
+
+# RUN pip uninstall opencv-python
+RUN pip install opencv-python-headless
+
+RUN apt-get install -y libpng-dev
+
+# Add layer start
+ARG AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-"cn-northwest-1"}
+ARG AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-"xxxx"}
+ARG AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-"xxxx"}
+ENV AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+ENV AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+ENV AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+RUN apt-get install -y curl unzip
+
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN ./aws/install
+
+# ocrTesseract
+RUN curl $(aws lambda get-layer-version-by-arn --arn arn:aws-cn:lambda:cn-northwest-1:795474696122:layer:ocrTesseract:3 --query 'Content.Location' --output text) --output pythonlibs-layer.zip
+# COPY pythonlibs-layer.zip .
+RUN unzip pythonlibs-layer.zip -d ${LAYER_DIR}
+RUN rm pythonlibs-layer.zip
+
+# pythonlibs-layer
+RUN curl $(aws lambda get-layer-version-by-arn --arn arn:aws-cn:lambda:cn-northwest-1:795474696122:layer:pythonlibs-layer:1 --query 'Content.Location' --output text) --output tesseract-layer.zip
+# COPY tesseract-layer.zip .
+RUN unzip tesseract-layer.zip -d ${LAYER_DIR}
+RUN rm tesseract-layer.zip
+# Add layer done
+
+
+# Multi-stage build: grab a fresh copy of the base image, use custom image instead of official one
+# FROM python:3.7
+FROM public.ecr.aws/bitnami/python:3.7
+# FROM public.ecr.aws/a1c1q3b9/python:3.7
+# FROM amazonlinux:2
+
+# Include global arg in this stage of the build
+ARG LAYER_DIR
+
+# Copy in the build image dependencies
+WORKDIR ${LAYER_DIR}
+COPY --from=build-image ${LAYER_DIR} .
+
+# WORKDIR /var/task
+# # Copy RIC and app.py
+# COPY --from=build-image /var/task .
+COPY app.py .
+
+
+RUN apt-get update && apt-get install -y libpng-dev libjpeg62 libtiff5
+
+RUN wget -q -O /tmp/libpng12.deb http://mirrors.kernel.org/ubuntu/pool/main/libp/libpng/libpng12-0_1.2.54-1ubuntu1_amd64.deb \
+  && dpkg -i /tmp/libpng12.deb \
+  && rm /tmp/libpng12.deb
+
+# Emulation env
+# RUN mkdir -p ~/.aws-lambda-rie
+# RUN curl -Lo ~/.aws-lambda-rie/aws-lambda-rie https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
+# RUN chmod +x ~/.aws-lambda-rie/aws-lambda-rie
+# ENTRYPOINT [ "~/.aws-lambda-rie/aws-lambda-rie", "/usr/local/bin/python", "-m", "awslambdaric" ]
+
+# ADD https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie /usr/local/bin/aws-lambda-rie
+# RUN chmod 755 /usr/local/bin/aws-lambda-rie
+
+COPY entry.sh /
+RUN chmod 755 /entry.sh
+
+ENV LD_LIBRARY_PATH="/opt:/opt/lib:${LD_LIBRARY_PATH}"
+ENV PATH="/opt:/opt/bin:${PATH}"
+
+# Production env
+# ENTRYPOINT [ "/entry.sh" ]
+ENTRYPOINT [ "/opt/python/bin/python", "-m", "awslambdaric" ]
+CMD [ "app.handler" ]
+
+
+## build/tag/login/push to ECR (local)
+
+# docker build -t local-lambda-python3.8-custom-ocr --build-arg AWS_DEFAULT_REGION=cn-northwest-1 --build-arg AWS_ACCESS_KEY_ID=xx --build-arg AWS_SECRET_ACCESS_KEY=xx -f dockerfile-custom-tesseract .
+# docker tag local-lambda-python3.8-custom-ocr:latest xx.dkr.ecr.cn-northwest-1.amazonaws.com.cn/local-lambda-python3.8-custom-ocr
+# aws ecr get-login-password --region cn-northwest-1 | docker login --username AWS --password-stdin xx.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+# docker push xx.dkr.ecr.cn-northwest-1.amazonaws.com.cn/local-lambda-python3.8-custom-ocr:latest
+
+## execute in local
+# mkdir -p ~/.aws-lambda-rie && curl -Lo ~/.aws-lambda-rie/aws-lambda-rie \
+https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie \
+&& chmod +x ~/.aws-lambda-rie/aws-lambda-rie
+# docker run -p 9000:8080 local-lambda-python3.8-custom-ocr:latest
+# docker run -d -v ~/.aws-lambda-rie:/aws-lambda -p 9000:8080 --entrypoint /aws-lambda/aws-lambda-rie  local-lambda-python3.8-custom-ocr:latest /usr/local/bin/python -m awslambdaric app.handler
+
+## local test
+
+# curl -X POST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"payload":"hello world!"}'
+# curl -X POST "http://localhost:9000/2015-03-31/functions/function/invocations" -d @helloWorld
