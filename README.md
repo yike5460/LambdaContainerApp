@@ -1,14 +1,14 @@
-# limitation
+# Limitation
 - Lambda functions packaged as container images do not support adding Lambda layers to the function configuration.
 
-# impelment dependency in custom container
+# Impelment dependency in custom container
 - When you include one or more layers in a function, during initialization, the contents of each layer are extracted in order to the /opt directory in the function execution environment.
 - Lambda searches the /opt/extensions directory and starts initializing any extensions found. Extensions must be executable as binaries or scripts. As the function code directory is read-only, extensions cannot modify function code. Lambda layers and extensions are just files copied into specific file paths in the execution environment during the function initialization. The files are read-only in the execution environment.
 
 # Using Lambda layers in container images, not consider non-official image
 There are a number of ways to use container image layering to add the functionality of Lambda layers to your Lambda function container images.
 
-## import layer from container
+## Import layer from container
 ### Build a container image contain Lambda layer
 **dockerfile**
 ```
@@ -47,7 +47,7 @@ WORKDIR /opt/extensions
 COPY --from=extensions-layer /opt/extensions/ 
 ```
 
-## import layer from uploaded layer by curl
+## Import layer from uploaded layer by curl
 ### Copy the contents of a Lambda layer into a container image
 
 **dockerfile**
@@ -91,7 +91,7 @@ docker build . -t layer-image1:latest \
 docker history layer-image1:latest
 ```
 
-## install layer directly in docker build
+## Install layer directly in docker build
 
 **dockerfile for extension image, can be merged into one**
 ```
@@ -146,5 +146,5 @@ With .zip archive functions, custom runtimes are added using Lambda layers. With
 You can build your own custom runtime images starting with AWS provided base images for custom runtimes. You can add your preferred runtime, dependencies, and code to these images. To communicate with Lambda, the image must implement the Lambda Runtime API. We provide Lambda runtime interface clients for all supported runtimes, or you can implement your own for additional runtimes.
 
 
-# reference
+# Reference
 https://aws.amazon.com/blogs/compute/working-with-lambda-layers-and-extensions-in-container-images/

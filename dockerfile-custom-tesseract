@@ -56,13 +56,13 @@ RUN unzip awscliv2.zip
 RUN ./aws/install
 
 # ocrTesseract
-RUN curl $(aws lambda get-layer-version-by-arn --arn arn:aws-cn:lambda:cn-northwest-1:795474696122:layer:ocrTesseract:3 --query 'Content.Location' --output text) --output pythonlibs-layer.zip
+RUN curl $(aws lambda get-layer-version-by-arn --arn arn:aws-cn:lambda:cn-northwest-1:123456789012:layer:ocrTesseract:3 --query 'Content.Location' --output text) --output pythonlibs-layer.zip
 # COPY pythonlibs-layer.zip .
 RUN unzip pythonlibs-layer.zip -d ${LAYER_DIR}
 RUN rm pythonlibs-layer.zip
 
 # pythonlibs-layer
-RUN curl $(aws lambda get-layer-version-by-arn --arn arn:aws-cn:lambda:cn-northwest-1:795474696122:layer:pythonlibs-layer:1 --query 'Content.Location' --output text) --output tesseract-layer.zip
+RUN curl $(aws lambda get-layer-version-by-arn --arn arn:aws-cn:lambda:cn-northwest-1:123456789012:layer:pythonlibs-layer:1 --query 'Content.Location' --output text) --output tesseract-layer.zip
 # COPY tesseract-layer.zip .
 RUN unzip tesseract-layer.zip -d ${LAYER_DIR}
 RUN rm tesseract-layer.zip
